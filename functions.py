@@ -59,3 +59,39 @@ def update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, radius
 
     return new_belief_map 
 
+@jax.jit 
+def dynamics_step(state, control, dt, max_speed) : 
+    """
+    update the drone state using unicycle kinematics via euler integration 
+    can handle a single state or a batch of mppi states
+    inputs : array of shape (..., 4) that has [px, py, theta, v] 
+    control : array of shape (..., 2) that has [a, omega] 
+    dt : time step in seconds
+    returns the next state with the same shape 
+    """
+
+    # unpack the state 
+    px = state[..., 0] 
+    py = state[..., 1] 
+    theta = state[..., 2] 
+    v = state[..., 3]  
+
+    # unpacking the controls 
+    a = control[..., 0] 
+    omega = control[..., 1] 
+
+    # euler integration (simple) 
+    # using jnp.sin and jnp.cos for jit compatibility 
+    next_px = px + v * jnp.cos(theta) * dt 
+    next_py = py + v * jnp.sin(theta) * dt 
+
+    next_theta = theta + omega * dt 
+    next_v = v + a * dt 
+
+    # clipping the max drone velocity 
+    next_v = jnp.clip(next_v, -max_speed, max_speed) 
+
+    # repacking the state 
+    next_state = jnp.stack([next_px, next_py, next_theta, next_v], axis=-1) 
+
+    return next_state
