@@ -96,13 +96,13 @@ def dynamics_step(state, control, dt, max_speed) :
 
     return next_state 
 
-def single_trajectory_rollout(state_init, control_sequence, dt): 
+def single_trajectory_rollout(state_init, control_sequence, dt, max_speed): 
     """
     simulate a single trajectory over the control horizon steps
     """
     def step_fn(current_state, current_control): 
         # update the state 
-        next_state = dynamics_step(current_state, current_control) 
+        next_state = dynamics_step(current_state, current_control, dt, max_speed) 
         # jax.lax.scan requires returning the 'carry' (state to pass to next step) 
         # and the 'output' (what we want to save in the final array) 
         return next_state, next_state 
