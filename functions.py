@@ -117,10 +117,10 @@ def single_trajectory_rollout(state_init, control_sequence, dt, max_speed):
 # no need to map the initial state (all trajectories start from the same initial state) 
 # but map the first axis of the control array (ofcourse) 
 # so we can roll N parallel trajectories simultaenously 
-batch_rollout = jax.vmap(single_trajectory_rollout, in_axes=(None, 0, None)) 
+batch_rollout = jax.vmap(single_trajectory_rollout, in_axes=(None, 0, None, None)) 
 
-@jax.jit
-def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, H=15, dt=0.1, lam=0.02, resolution=0.1): 
+# @jax.jit(static_argnums=(5, 6))
+def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, H=15, dt=0.1, lam=0.02, resolution=0.1, max_speed=2.0): 
     """
     performs one complete mppi optimization 
     # state: current drone state (4,)  [px, py, theta, v] 
@@ -150,7 +150,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     # rollouts  
     # using of vmap function to simulate all N trajectories in parallel 
     # paths will be of shape (N, H, 4) 
-    paths = batch_rollout(state, perturbed_controls, dt) 
+    paths = batch_rollout(state, perturbed_controls, dt, max_speed) 
 
     # cost evaluation 
     # extracting x and y positions from the paths 
@@ -176,10 +176,10 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     map_values = belief_map[row_indices, col_indices] 
 
     # massive penalty for for when the visited space is not free (0) 
-    collision_cost = jnp.sum(map_values != 0, axis=-1) * 10000.0 
+    collision_cost = jnp.sum(map_values != 0, axis=-1) * 10000000000000000.0 
 
     # total cost (shape: N) 
-    total_cost = goal_cost + collision_cost 
+    total_cost = goal_cost + 500*collision_cost 
 
     # weight update 
     # subtract the minimum cost for numerical stability (prevents e^-infinity = 0) 
@@ -199,3 +199,5 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     # new nominal controls to be used next timestep 
     # and new PRNG key so we can generate different random numbers next time 
     return optimal_control_sequence, key 
+
+mppi_step = jax.jit(mppi_step, static_argnums=(5, 6))

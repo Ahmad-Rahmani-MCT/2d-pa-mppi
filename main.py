@@ -47,7 +47,7 @@ def main():
 
         # mppi optimization 
         optimal_controls, prng_key = mppi_step(current_state, nominal_controls, belief_map,
-                                               goal_pos, prng_key, N, H, dt, lam, resolution) 
+                                               goal_pos, prng_key, N, H, dt, lam, resolution, max_speed) 
         
         # receeding horizon 
         # shift the control sequence forward by 1 step 
