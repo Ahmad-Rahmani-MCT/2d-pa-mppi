@@ -5,7 +5,7 @@ from plotting import plot_simulation
 
 def main(): 
     # setup parameters 
-    dt = 0.1 
+    dt = 0.1
     max_steps = 150 
     resolution = 0.1 
     max_speed = 2.0 
