@@ -11,7 +11,7 @@ def main():
     max_speed = 2.0 
 
     # mppi parameters 
-    H = 20  
+    H = 50  
     N = 1000 
     lam = 0.05 # mppi temperature 
 

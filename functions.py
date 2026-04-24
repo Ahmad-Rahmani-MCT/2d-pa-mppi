@@ -18,7 +18,10 @@ def initialize_maps(width_m : float = 3.0, length_m : float = 10.0, resolution :
     # adding an obstacle in the middle just to test our setup 
     # using .at[...].set(...) syntax to return a NEW array with the updates values 
     # vertical wall in the middle 
-    ground_truth_map = ground_truth_map.at[50, 10:20].set(1) 
+    ground_truth_map = ground_truth_map.at[50, 0:15].set(1)
+    ground_truth_map = ground_truth_map.at[30, 15:30].set(1) 
+    ground_truth_map = ground_truth_map.at[70, 0:14].set(1) 
+    ground_truth_map = ground_truth_map.at[70, 16:30].set(1) 
 
     # belief map 
     # initialize all with -1 (unkown) 
@@ -137,7 +140,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
 
     # generate gassian noise for N trajectories, h steps and 2 control inputs 
     # assuming a std dev of 1.0 for acceleration and 0.5 for omega 
-    noise_std = jnp.array([1.0, 0.5]) 
+    noise_std = jnp.array([1.0, 1.0]) 
     noise = jax.random.normal(subkey, shape=(N, H, 2)) * noise_std 
 
     # apply noise to the nominal control to create N different control sequences 
@@ -169,6 +172,8 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
 
     # clip indices in case drone flies out of the map 
     max_rows, max_cols = belief_map.shape 
+    out_of_bounds = (col_indices < 0) | (col_indices >= max_cols) | \
+                    (row_indices < 0) | (row_indices >= max_rows)
     col_indices = jnp.clip(col_indices, 0, max_cols-1) 
     row_indices = jnp.clip(row_indices, 0, max_rows - 1) 
 
@@ -176,8 +181,9 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     map_values = belief_map[row_indices, col_indices] 
 
     # massive penalty for for when the visited space is not free (0) 
-    collision_cost = jnp.sum(map_values != 0, axis=-1) * 10000000000000000.0 
-
+    # collision_cost = jnp.sum(map_values != 0, axis=-1) * 10000.0 
+    collision_cost = jnp.sum((map_values != 0) | out_of_bounds, axis=-1) * 10000.0
+    
     # total cost (shape: N) 
     total_cost = goal_cost + 500*collision_cost 
 
