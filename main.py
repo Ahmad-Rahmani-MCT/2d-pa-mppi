@@ -1,30 +1,33 @@
 import jax 
 import jax.numpy as jnp 
-from functions import initialize_maps, mppi_step, dynamics_step 
+from functions import initialize_maps, mppi_step, dynamics_step, update_belief_map 
 from plotting import plot_simulation
 
 def main(): 
     # setup parameters 
     dt = 0.1
-    max_steps = 150 
+    max_steps = 500 
     resolution = 0.1 
     max_speed = 2.0 
 
-    # mppi parameters 
+    # mppi parameters   
     H = 50  
     N = 1000 
     lam = 0.05 # mppi temperature 
 
     # initializing the environments 
-    ground_truth_map, _ = initialize_maps(width_m=3.0, length_m=10.0, resolution=resolution) 
+    ground_truth_map, belief_map = initialize_maps(width_m=3.0, length_m=10.0, resolution=resolution) 
 
     # assume perfect map knowledge 
-    belief_map = ground_truth_map 
+    # belief_map = ground_truth_map 
 
     # initial conditions 
     # starting at bottom middle facing upwards 
     start_state = jnp.array([1.5, 1.0, jnp.pi/2, 0.0]) 
     goal_pos = jnp.array([1.5, 9.0]) 
+
+    # Define sensor radius (e.g., 1.5 meters = 15 cells)
+    sensor_radius_cells = 15
 
     # intialize nominal controls (to zero) 
     nominal_controls = jnp.zeros((H, 2)) 
@@ -39,6 +42,15 @@ def main():
     print("starting the simulation") 
 
     for step in range(max_steps): 
+
+        # --- NEW: UPDATE BELIEF MAP (THE SENSOR) ---
+        # Convert physical position to grid indices
+        drone_col = int(current_state[0] / resolution)
+        drone_row = int(current_state[1] / resolution)
+
+        # Update what the drone sees
+        belief_map = update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, sensor_radius_cells)
+
         # calculate distance to goal for completion 
         dist_to_goal = jnp.linalg.norm(current_state[:2]-goal_pos) 
         if dist_to_goal <= 0.1 : 
@@ -66,7 +78,8 @@ def main():
     
     print("simulation completed") 
 
-    plot_simulation(ground_truth_map, state_history, goal_pos, resolution) 
+    # plot_simulation(ground_truth_map, state_history, goal_pos, resolution)
+    plot_simulation(belief_map, state_history, goal_pos, resolution) 
 
 if __name__ == "__main__" : 
     main()

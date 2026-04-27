@@ -18,10 +18,10 @@ def initialize_maps(width_m : float = 3.0, length_m : float = 10.0, resolution :
     # adding an obstacle in the middle just to test our setup 
     # using .at[...].set(...) syntax to return a NEW array with the updates values 
     # vertical wall in the middle 
-    ground_truth_map = ground_truth_map.at[50, 0:15].set(1)
-    ground_truth_map = ground_truth_map.at[30, 15:30].set(1) 
-    ground_truth_map = ground_truth_map.at[70, 0:14].set(1) 
-    ground_truth_map = ground_truth_map.at[70, 16:30].set(1) 
+    ground_truth_map = ground_truth_map.at[47:52, 0:20].set(1)
+    ground_truth_map = ground_truth_map.at[20:25, 10:30].set(1) 
+    ground_truth_map = ground_truth_map.at[68:72, 0:12].set(1) 
+    ground_truth_map = ground_truth_map.at[68:72, 15:30].set(1) 
 
     # belief map 
     # initialize all with -1 (unkown) 
@@ -125,85 +125,86 @@ batch_rollout = jax.vmap(single_trajectory_rollout, in_axes=(None, 0, None, None
 # @jax.jit(static_argnums=(5, 6))
 def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, H=15, dt=0.1, lam=0.02, resolution=0.1, max_speed=2.0): 
     """
-    performs one complete mppi optimization 
-    # state: current drone state (4,)  [px, py, theta, v] 
-    # nominal_controls: best control sequence from the last step (H, 2) 
-    # belief_map: drone 2D map knowledge 
-    # goal_pos: target [x, y] coordinates 
-    # prng_key: JAX random key 
-    # N: number of samples 
-    # H: horizon length 
-    # lam: lambda (mppi temperature parameter)
+    performs one complete MPPI optimization step
     """
-    # sampling (JAX procedure) 
+    # mppi noise sampling 
     key, subkey = jax.random.split(prng_key) 
-
-    # generate gassian noise for N trajectories, h steps and 2 control inputs 
-    # assuming a std dev of 1.0 for acceleration and 0.5 for omega 
-    noise_std = jnp.array([1.0, 1.0]) 
+    noise_std = jnp.array([1.5, 1.5]) 
     noise = jax.random.normal(subkey, shape=(N, H, 2)) * noise_std 
-
-    # apply noise to the nominal control to create N different control sequences 
-    # nominal_controls shape (H, 2) but noise is (N, H, 2) JAX broadcasts this 
     perturbed_controls = nominal_controls + noise 
-
-    # clipping the controls 
-    # perturbed_controls = jnp.clip(perturbed_controls, min_control_bounds, max_control_bounds) 
-
-    # rollouts  
-    # using of vmap function to simulate all N trajectories in parallel 
-    # paths will be of shape (N, H, 4) 
+    # rollout 
     paths = batch_rollout(state, perturbed_controls, dt, max_speed) 
-
-    # cost evaluation 
-    # extracting x and y positions from the paths 
+    # extracting the states
     px = paths[..., 0] 
     py = paths[..., 1] 
+    theta = paths[..., 2]
+    v_seq = paths[..., 3] 
+    all_positions = paths[..., :2] 
 
-    # distance to goal at the final step 
-    # paths[:, -1, :2] gives the final [px, py] for all N trajectories 
-    final_positions = paths[..., -1, :2] 
-    goal_cost = jnp.sum((final_positions-goal_pose)**2, axis=-1) * 2.5 # weighting factor 
+    # costs  
 
-    # collision cost  
-    # converting continuous positions to matrix indices 
-    col_indices = jnp.floor(px/resolution).astype(jnp.int32) 
-    row_indices = jnp.floor(py/resolution).astype(jnp.int32) 
+    # trajectory and final pos costs
 
-    # clip indices in case drone flies out of the map 
-    max_rows, max_cols = belief_map.shape 
+    # trajectory cost wrt the goal (penaliing the trajectory for wandering)
+    # squared euclidean distance between drone and the goal at all the time steps
+    step_goal_costs = jnp.sum((all_positions - goal_pose)**2, axis=-1)  # shape (N,H)
+    trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 0.1 # sums along the last axis, shape (N,)
+
+    # destination cost 
+    final_positions = all_positions[..., -1, :] # last pos at the prediction horizon for each trajectory  
+    terminal_goal_cost = jnp.sum((final_positions - goal_pose)**2, axis=-1) * 5.0 
+
+    # actual euclidean distances for the thresholds
+    dist_to_goal = jnp.linalg.norm(all_positions - goal_pose, axis=-1)
+    final_dist_to_goal = dist_to_goal[..., -1]
+
+    # obstacle and collisions costs  
+
+    # real distance to voxels
+    col_indices = jnp.floor(px / resolution).astype(jnp.int32) 
+    row_indices = jnp.floor(py / resolution).astype(jnp.int32) 
+
+    # shape of the belief map (not constant) 
+    max_rows, max_cols = belief_map.shape  
+    # (|) logical or operator, returns true if TRUE if the conditions are met
     out_of_bounds = (col_indices < 0) | (col_indices >= max_cols) | \
                     (row_indices < 0) | (row_indices >= max_rows)
-    col_indices = jnp.clip(col_indices, 0, max_cols-1) 
+    
+    # assuming not out of bounds ! (safety)
+    col_indices = jnp.clip(col_indices, 0, max_cols - 1) 
     row_indices = jnp.clip(row_indices, 0, max_rows - 1) 
-
-    # looking for the map values for every point (N, H) 
+    # getting all the map values !
     map_values = belief_map[row_indices, col_indices] 
 
-    # massive penalty for for when the visited space is not free (0) 
-    # collision_cost = jnp.sum(map_values != 0, axis=-1) * 10000.0 
-    collision_cost = jnp.sum((map_values != 0) | out_of_bounds, axis=-1) * 10000.0
+    # fatal if hitting walls (1) or going out of the map (bounds)
+    is_fatal = (map_values == 1) | out_of_bounds
+    obstacle_cost = jnp.sum(is_fatal, axis=-1) * 10000.0 
+
+    # smooth progress and braking near target
+
+    # current distance to the goal 
+    start_dist = jnp.linalg.norm(state[:2] - goal_pose)
     
-    # total cost (shape: N) 
-    total_cost = goal_cost + 500*collision_cost 
+    # rewarding progress
+    progress_reward = (final_dist_to_goal - start_dist) * 300.0 
 
-    # weight update 
-    # subtract the minimum cost for numerical stability (prevents e^-infinity = 0) 
+    # ==========================================
+    # 6. ACTION COST (Smooth driving)
+    # ==========================================
+    action_cost = jnp.sum(perturbed_controls**2, axis=(1, 2)) * 1.0 
+
+    # --- TOTAL COST COMPILATION ---
+    total_cost = (trajectory_goal_cost + terminal_goal_cost + progress_reward + 
+                  obstacle_cost + action_cost)
+
+    # ==========================================
+    # 7. WEIGHT UPDATE & CONTROL EXTRACTION
+    # ==========================================
     beta = jnp.min(total_cost) 
-
-    # calculate exponential weights: w = exp( -(S - min(S)) / lambda ) 
     weights = jnp.exp(- (total_cost - beta) / lam) 
-
-    # normalize weights so they sum to 1 
     weights = weights / jnp.sum(weights) 
 
-    # new optimal control sequence by doing a weighted sum of the noise 
-    # weights is (N,), noise is (N, H, 2) 
-    # reshape weights to (N, 1, 1) so it broadcasts over H and the 2 control inputs 
     optimal_control_sequence = nominal_controls + jnp.sum(weights.reshape(N, 1, 1) * noise, axis=0) 
-
-    # new nominal controls to be used next timestep 
-    # and new PRNG key so we can generate different random numbers next time 
-    return optimal_control_sequence, key 
+    return optimal_control_sequence, key
 
 mppi_step = jax.jit(mppi_step, static_argnums=(5, 6))
