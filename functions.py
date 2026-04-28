@@ -148,7 +148,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     # trajectory cost wrt the goal (penaliing the trajectory for wandering)
     # squared euclidean distance between drone and the goal at all the time steps
     step_goal_costs = jnp.sum((all_positions - goal_pose)**2, axis=-1)  # shape (N,H)
-    trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 0.1 # sums along the last axis, shape (N,)
+    trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 1.0 # sums along the last axis, shape (N,)
 
     # destination cost 
     final_positions = all_positions[..., -1, :] # last pos at the prediction horizon for each trajectory  
@@ -180,17 +180,8 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     is_fatal = (map_values == 1) | out_of_bounds
     obstacle_cost = jnp.sum(is_fatal, axis=-1) * 10000.0 
 
-    # smooth progress and braking near target
-
-    # current distance to the goal 
-    start_dist = jnp.linalg.norm(state[:2] - goal_pose)
-    
-    # rewarding progress
-    progress_reward = (final_dist_to_goal - start_dist) * 3.0 
-
     # toal cost
-    total_cost = (trajectory_goal_cost + terminal_goal_cost + progress_reward + 
-                  obstacle_cost)
+    total_cost = (trajectory_goal_cost + terminal_goal_cost  + obstacle_cost)
 
     # weight update and control extraction
     beta = jnp.min(total_cost) 
