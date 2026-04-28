@@ -38,6 +38,7 @@ def main():
     # simulation loop 
     current_state = start_state
     state_history = [current_state] 
+    control_history = []
 
     print("starting the simulation") 
 
@@ -65,6 +66,7 @@ def main():
         # shift the control sequence forward by 1 step 
         # the last step is filled with zeros
         best_action = optimal_controls[0]  
+        control_history.append(best_action)
         shifted_controls = jnp.roll(optimal_controls, shift=-1, axis=0) 
         nominal_controls = shifted_controls.at[-1].set(jnp.array([0.0, 0.0]))
 
@@ -79,7 +81,7 @@ def main():
     print("simulation completed") 
 
     # plot_simulation(ground_truth_map, state_history, goal_pos, resolution)
-    plot_simulation(belief_map, state_history, goal_pos, resolution) 
+    plot_simulation(belief_map, state_history, control_history, goal_pos, resolution) 
 
 if __name__ == "__main__" : 
     main()
