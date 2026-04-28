@@ -22,6 +22,8 @@ def initialize_maps(width_m : float = 3.0, length_m : float = 10.0, resolution :
     ground_truth_map = ground_truth_map.at[20:25, 10:30].set(1) 
     ground_truth_map = ground_truth_map.at[68:72, 0:12].set(1) 
     ground_truth_map = ground_truth_map.at[68:72, 15:30].set(1) 
+    ground_truth_map = ground_truth_map.at[35:38, 5:25].set(1)
+    ground_truth_map = ground_truth_map.at[58:61, 5:25].set(1)
 
     # belief map 
     # initialize all with -1 (unkown) 
@@ -150,14 +152,6 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     step_goal_costs = jnp.sum((all_positions - goal_pose)**2, axis=-1)  # shape (N,H)
     trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 1.0 # sums along the last axis, shape (N,)
 
-    # destination cost 
-    final_positions = all_positions[..., -1, :] # last pos at the prediction horizon for each trajectory  
-    terminal_goal_cost = jnp.sum((final_positions - goal_pose)**2, axis=-1) * 5.0 
-
-    # actual euclidean distances for the thresholds
-    dist_to_goal = jnp.linalg.norm(all_positions - goal_pose, axis=-1)
-    final_dist_to_goal = dist_to_goal[..., -1]
-
     # obstacle and collisions costs  
 
     # real distance to voxels
@@ -181,7 +175,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     obstacle_cost = jnp.sum(is_fatal, axis=-1) * 10000.0 
 
     # toal cost
-    total_cost = (trajectory_goal_cost + terminal_goal_cost  + obstacle_cost)
+    total_cost = (trajectory_goal_cost + obstacle_cost)
 
     # weight update and control extraction
     beta = jnp.min(total_cost) 
