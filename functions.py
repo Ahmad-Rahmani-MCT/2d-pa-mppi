@@ -85,6 +85,12 @@ def dynamics_step(state, control, dt, max_speed) :
     a = control[..., 0] 
     omega = control[..., 1] 
 
+    # hw limits 
+    max_a = 0.7
+    max_omega = jnp.pi
+    a = jnp.clip(a, -max_a, max_a)
+    omega = jnp.clip(omega, -max_omega, max_omega)  
+
     # euler integration (simple) 
     # using jnp.sin and jnp.cos for jit compatibility 
     next_px = px + v * jnp.cos(theta) * dt 
@@ -131,9 +137,16 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     """
     # mppi noise sampling 
     key, subkey = jax.random.split(prng_key) 
-    noise_std = jnp.array([1.5, 1.5]) 
+    noise_std = jnp.array([8, 8]) 
     noise = jax.random.normal(subkey, shape=(N, H, 2)) * noise_std 
-    perturbed_controls = nominal_controls + noise 
+    perturbed_controls = nominal_controls + noise  
+
+    # clipping limits (hw) 
+    # limits: [max_acceleration, max_angular_velocity] 
+    max_controls = jnp.array([0.7, jnp.pi]) 
+    min_controls = jnp.array([-0.7, -jnp.pi]) 
+    perturbed_controls = jnp.clip(perturbed_controls, min_controls, max_controls) 
+
     # rollout 
     paths = batch_rollout(state, perturbed_controls, dt, max_speed) 
     # extracting the states
@@ -150,7 +163,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     # trajectory cost wrt the goal (penaliing the trajectory for wandering)
     # squared euclidean distance between drone and the goal at all the time steps
     step_goal_costs = jnp.sum((all_positions - goal_pose)**2, axis=-1)  # shape (N,H)
-    trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 1.0 # sums along the last axis, shape (N,)
+    trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 0.05 # sums along the last axis, shape (N,) 
 
     # obstacle and collisions costs  
 
@@ -182,7 +195,9 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     weights = jnp.exp(- (total_cost - beta) / lam) 
     weights = weights / jnp.sum(weights) 
 
-    optimal_control_sequence = nominal_controls + jnp.sum(weights.reshape(N, 1, 1) * noise, axis=0) 
+    optimal_control_sequence = nominal_controls + jnp.sum(weights.reshape(N, 1, 1) * noise, axis=0)  
+    optimal_control_sequence = jnp.clip(optimal_control_sequence, min_controls, max_controls)
+
     return optimal_control_sequence, key
 
 mppi_step = jax.jit(mppi_step, static_argnums=(5, 6))
