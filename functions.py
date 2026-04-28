@@ -186,20 +186,13 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     start_dist = jnp.linalg.norm(state[:2] - goal_pose)
     
     # rewarding progress
-    progress_reward = (final_dist_to_goal - start_dist) * 300.0 
+    progress_reward = (final_dist_to_goal - start_dist) * 3.0 
 
-    # ==========================================
-    # 6. ACTION COST (Smooth driving)
-    # ==========================================
-    action_cost = jnp.sum(perturbed_controls**2, axis=(1, 2)) * 1.0 
-
-    # --- TOTAL COST COMPILATION ---
+    # toal cost
     total_cost = (trajectory_goal_cost + terminal_goal_cost + progress_reward + 
-                  obstacle_cost + action_cost)
+                  obstacle_cost)
 
-    # ==========================================
-    # 7. WEIGHT UPDATE & CONTROL EXTRACTION
-    # ==========================================
+    # weight update and control extraction
     beta = jnp.min(total_cost) 
     weights = jnp.exp(- (total_cost - beta) / lam) 
     weights = weights / jnp.sum(weights) 
