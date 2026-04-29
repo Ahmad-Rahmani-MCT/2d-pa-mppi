@@ -62,6 +62,61 @@ def update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, radius
     # otherwise keep existing 
     new_belief_map = jnp.where(in_sensor_range, ground_truth_map, belief_map)  
 
+    return new_belief_map  
+
+@jax.jit 
+def update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_col, drone_theta, radius_cells, fov_rad): 
+    """
+    simulates the drone sensor updating its internal map based on the fov and its heading
+    using vector operations instead of for loops
+    """ 
+    # getting shape of our belief map 
+    rows, cols = belief_map.shape 
+
+    # creating 1d arrays of the row and column indices 
+    r_idx = jnp.arange(rows) 
+    c_idx = jnp.arange(cols) 
+
+    # creating 2d coordinate grids 
+    # R[i, j] will be i, and C[i, j] will be j for every cell in the map (to be used later for broadcasting) 
+    R, C = jnp.meshgrid(r_idx, c_idx, indexing='ij') 
+
+    # calculating the squared distance from drone to all cells 
+    # square distance to save computation time 
+    dist_sq = (R - drone_row)**2 + (C - drone_col)**2 
+
+    # boolean checking 
+    in_sensor_range = dist_sq <= (radius_cells**2)  
+
+    # fov limited update 
+    # calculating the dx and dy from the drone to all the cell in the grid 
+    # C corresponds to x (columns) and R corresponds to y (rows) 
+    dx = C - drone_col 
+    dy = R - drone_row 
+
+    # calculating the absolute angle to each cell 
+    cell_angles = jnp.arctan2(dy, dx) 
+
+    # difference between the angles 
+    angle_diff = cell_angles - drone_theta 
+
+    # normalization between [-pi, pi] 
+    angle_diff = jnp.arctan2(jnp.sin(angle_diff), jnp.cos(angle_diff)) 
+
+    # checking fov (half the limit)
+    in_fov = jnp.abs(angle_diff) <= (fov_rad / 2.0) 
+
+    # current cell is always visible (arctan(0,0) edge case) 
+    is_drone_cell = dist_sq == 0 
+
+    # combine distance, FOV, and drone cell conditions
+    is_visible = (in_sensor_range & in_fov) | is_drone_cell 
+
+    # using jnp.where(condition, x, y) 
+    # where in_sensor_range is true, pick from ground_truth_map 
+    # otherwise keep existing 
+    new_belief_map = jnp.where(is_visible, ground_truth_map, belief_map) 
+
     return new_belief_map 
 
 @jax.jit 
@@ -282,7 +337,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     active_perception_costs = jnp.where(has_los, 0.0, perception_costs)
 
     # total cost
-    total_cost = trajectory_goal_cost + obstacle_cost + 1000*active_perception_costs
+    total_cost = trajectory_goal_cost + obstacle_cost + 5000*active_perception_costs
 
     # weight update and control extraction
     beta = jnp.min(total_cost) 

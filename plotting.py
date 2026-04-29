@@ -2,9 +2,10 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import numpy as np
 
-def plot_simulation(map_matrix, state_history, control_history, goal_pos, resolution=0.1):
+def plot_simulation(map_matrix, state_history, control_history, goal_pos, resolution=0.1, arrow_step=10):
     """
     Plots the 2D environment, goal, drone's trajectory, and state/control inputs.
+    Includes directional arrows to indicate heading.
     """
     # Convert JAX arrays to standard numpy for plotting
     map_matrix = np.array(map_matrix)
@@ -14,6 +15,7 @@ def plot_simulation(map_matrix, state_history, control_history, goal_pos, resolu
     # Extract states
     path_x = state_history[:, 0]
     path_y = state_history[:, 1]
+    theta = state_history[:, 2]   # --- NEW: Extract heading (theta) ---
     velocity = state_history[:, 3]
     
     # Extract controls (if the simulation ran for T steps, we have T controls)
@@ -47,6 +49,16 @@ def plot_simulation(map_matrix, state_history, control_history, goal_pos, resolu
     ax_map.scatter(goal_pos[0], goal_pos[1], c='red', marker='x', s=100, label='Goal')
     ax_map.scatter(path_x[0], path_y[0], c='green', marker='o', s=100, label='Start')
     ax_map.plot(path_x, path_y, c='blue', linewidth=2, label='Trajectory')
+    
+    # --- NEW: Heading Arrows (Quiver Plot) ---
+    # Calculate directional components (u, v) from theta
+    u = np.cos(theta)
+    v_dir = np.sin(theta) 
+    
+    # Plot arrows every 'arrow_step' to prevent visual clutter
+    ax_map.quiver(path_x[::arrow_step], path_y[::arrow_step], 
+                  u[::arrow_step], v_dir[::arrow_step], 
+                  color='red', scale=25, width=0.005, headwidth=4, alpha=0.7, label='Heading')
     
     ax_map.set_title("2D MPPI Drone Navigation")
     ax_map.set_xlabel("X Position (m)")

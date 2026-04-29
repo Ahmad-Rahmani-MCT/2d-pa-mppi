@@ -1,6 +1,6 @@
 import jax 
 import jax.numpy as jnp 
-from functions import initialize_maps, mppi_step, dynamics_step, update_belief_map 
+from functions import initialize_maps, mppi_step, dynamics_step, update_belief_map, update_belief_map_limitedfov 
 from plotting import plot_simulation
 
 def main(): 
@@ -27,7 +27,11 @@ def main():
     goal_pos = jnp.array([1.5, 9.0]) 
 
     # Define sensor radius (e.g., 1.5 meters = 15 cells)
-    sensor_radius_cells = 5
+    sensor_radius_cells = 5 
+
+    # define camera FOV 
+    fov_deg = 90.0 
+    fov_rad = fov_deg * (jnp.pi/180.0)
 
     # intialize nominal controls (to zero) 
     nominal_controls = jnp.zeros((H, 2)) 
@@ -44,13 +48,16 @@ def main():
 
     for step in range(max_steps): 
 
-        # --- NEW: UPDATE BELIEF MAP (THE SENSOR) ---
+        # updates belief map
         # Convert physical position to grid indices
         drone_col = int(current_state[0] / resolution)
         drone_row = int(current_state[1] / resolution)
 
+        # extract heading 
+        drone_theta = current_state[2] 
+
         # Update what the drone sees
-        belief_map = update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, sensor_radius_cells)
+        belief_map = update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_col, drone_theta, sensor_radius_cells, fov_rad)
 
         # calculate distance to goal for completion 
         dist_to_goal = jnp.linalg.norm(current_state[:2]-goal_pos) 
