@@ -8,7 +8,7 @@ def main():
     dt = 0.1
     max_steps = 500 
     resolution = 0.1 
-    max_speed = 2.0 
+    max_speed = 1.0 
 
     # mppi parameters   
     H = 50  
@@ -27,7 +27,7 @@ def main():
     goal_pos = jnp.array([1.5, 9.0]) 
 
     # Define sensor radius (e.g., 1.5 meters = 15 cells)
-    sensor_radius_cells = 15
+    sensor_radius_cells = 5
 
     # intialize nominal controls (to zero) 
     nominal_controls = jnp.zeros((H, 2)) 

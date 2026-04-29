@@ -86,7 +86,7 @@ def dynamics_step(state, control, dt, max_speed) :
     omega = control[..., 1] 
 
     # hw limits 
-    max_a = 0.7
+    max_a = 15
     max_omega = jnp.pi
     a = jnp.clip(a, -max_a, max_a)
     omega = jnp.clip(omega, -max_omega, max_omega)  
@@ -122,7 +122,86 @@ def single_trajectory_rollout(state_init, control_sequence, dt, max_speed):
     # it returns the very final state, and an array of all intermediate states (the path) 
     _, path = jax.lax.scan(step_fn, state_init, control_sequence) 
 
-    return path 
+    return path  
+
+@jax.jit
+def check_line_of_sight(start_pos, goal_pos, belief_map, resolution, num_ray_points=50):
+    """
+    check if there is a clear, known path from the current position to the goal
+    true if LOS is clear, false if blocked by obstacle (1) or unknown (-1)
+    """
+    max_rows, max_cols = belief_map.shape
+    
+    # sampling points along a single line from start to goal
+    t = jnp.linspace(0, 1, num_ray_points)
+    vec = goal_pos - start_pos
+    ray_points = start_pos + t[:, None] * vec  # shape: (num_ray_points, 2)
+    
+    # conversion to grid indices and clip to bounds
+    ray_cols = jnp.clip(jnp.floor(ray_points[:, 0] / resolution).astype(jnp.int32), 0, max_cols - 1)
+    ray_rows = jnp.clip(jnp.floor(ray_points[:, 1] / resolution).astype(jnp.int32), 0, max_rows - 1)
+    
+    # getting the values of the belief map along the ray
+    ray_voxels = belief_map[ray_rows, ray_cols]
+    
+    # LOS is clear if all voxels along the ray are 0 (free space) 
+    is_blocked = jnp.any(ray_voxels != 0)
+    return jnp.logical_not(is_blocked) 
+
+@jax.jit
+def calculate_perception_cost(endpoints, goal_pose, belief_map, resolution, num_ray_points=20):
+    """
+    ray tracing (vector form) from N trajectory endpoints to goal
+    endpoints: shape (N, 2)
+    """
+    N = endpoints.shape[0]
+    max_rows, max_cols = belief_map.shape
+
+    # interpolation steps (0 to 1)
+    t = jnp.linspace(0, 1, num_ray_points) # shape: (M,)
+    
+    # geting vectors from each endpoint to the goal
+    vecs = goal_pose - endpoints # shape: (N, 2)
+    
+    # broadcasting (helpful) to create M points along N rays simultaneously
+    # endpoints: (N, 1, 2) | t: (1, M, 1) | vecs: (N, 1, 2)
+    ray_points = endpoints[:, None, :] + t[None, :, None] * vecs[:, None, :] # Shape: (N, M, 2)
+
+    # convert physical coordinates to map indices
+    ray_cols = jnp.floor(ray_points[..., 0] / resolution).astype(jnp.int32)
+    ray_rows = jnp.floor(ray_points[..., 1] / resolution).astype(jnp.int32)
+
+    # clip to map bounds (safety)
+    ray_cols = jnp.clip(ray_cols, 0, max_cols - 1)
+    ray_rows = jnp.clip(ray_rows, 0, max_rows - 1)
+
+    # check voxel values: Shape (N, M)
+    ray_voxels = belief_map[ray_rows, ray_cols] 
+
+    # finding the first collision along each ray
+    # boolean mask of not free space (either 1 or -1)
+    is_not_free = (ray_voxels != 0)
+    
+    # jnp.argmax returns the index of the first True value
+    first_col_idx = jnp.argmax(is_not_free, axis=1) # Shape: (N,)
+    has_collision = jnp.any(is_not_free, axis=1)    # Shape: (N,)
+
+    # actual voxel value (-1 or 1) at the first collision
+    first_voxels = ray_voxels[jnp.arange(N), first_col_idx]
+
+    # assigning perception costs 
+    C_occupied = 2.0
+    C_unknown = 500.0 
+
+    p_costs = jnp.zeros(N)
+    
+    # penalty if the ray hits a wall first
+    p_costs = jnp.where(has_collision & (first_voxels == 1), C_occupied, p_costs)
+    
+    # reward (negative cost) if the ray hits an unknown frontier first
+    p_costs = jnp.where(has_collision & (first_voxels == -1), -C_unknown, p_costs)
+
+    return p_costs
 
 # magic of vmap 
 # no need to map the initial state (all trajectories start from the same initial state) 
@@ -143,8 +222,8 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
 
     # clipping limits (hw) 
     # limits: [max_acceleration, max_angular_velocity] 
-    max_controls = jnp.array([0.7, jnp.pi]) 
-    min_controls = jnp.array([-0.7, -jnp.pi]) 
+    max_controls = jnp.array([15, jnp.pi]) 
+    min_controls = jnp.array([-15, -jnp.pi]) 
     perturbed_controls = jnp.clip(perturbed_controls, min_controls, max_controls) 
 
     # rollout 
@@ -187,8 +266,23 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     is_fatal = (map_values == 1) | out_of_bounds
     obstacle_cost = jnp.sum(is_fatal, axis=-1) * 10000.0 
 
-    # toal cost
-    total_cost = (trajectory_goal_cost + obstacle_cost)
+    # perception cost
+    
+    # check LOS to goal from the current position
+    has_los = check_line_of_sight(state[:2], goal_pose, belief_map, resolution)
+
+    # 2. calculate ray tracing costs from the ENDPOINTS (last) of the sampled trajectories
+    # final step of the horizon: all_positions[:, -1, :]
+    endpoints = all_positions[:, -1, :] 
+    perception_costs = calculate_perception_cost(endpoints, goal_pose, belief_map, resolution)
+
+    # only apply perception costs if no LOS
+    # has_los is True, active_perception_costs becomes 0.0 (exploitation)
+    # has_los is False, we use the calculated costs (exploration)
+    active_perception_costs = jnp.where(has_los, 0.0, perception_costs)
+
+    # total cost
+    total_cost = trajectory_goal_cost + obstacle_cost + 1000*active_perception_costs
 
     # weight update and control extraction
     beta = jnp.min(total_cost) 
