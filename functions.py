@@ -15,15 +15,38 @@ def initialize_maps(width_m : float = 3.0, length_m : float = 10.0, resolution :
     # we initialize the map all with zeros (free) and then add obstacles 
     ground_truth_map = jnp.zeros((rows, cols), dtype=jnp.int32) 
 
-    # adding an obstacle in the middle just to test our setup 
+    # adding an obstacles  
     # using .at[...].set(...) syntax to return a NEW array with the updates values 
-    # vertical wall in the middle 
-    ground_truth_map = ground_truth_map.at[47:52, 0:20].set(1)
-    ground_truth_map = ground_truth_map.at[20:25, 10:30].set(1) 
-    ground_truth_map = ground_truth_map.at[68:72, 0:12].set(1) 
-    ground_truth_map = ground_truth_map.at[68:72, 15:30].set(1) 
-    ground_truth_map = ground_truth_map.at[35:38, 5:25].set(1)
-    ground_truth_map = ground_truth_map.at[58:61, 5:25].set(1)
+
+    # walls (maze)
+    # ground_truth_map = ground_truth_map.at[47:52, 0:20].set(1)
+    # ground_truth_map = ground_truth_map.at[20:25, 10:30].set(1) 
+    # ground_truth_map = ground_truth_map.at[68:72, 0:12].set(1) 
+    # ground_truth_map = ground_truth_map.at[68:72, 15:30].set(1) 
+    # ground_truth_map = ground_truth_map.at[35:38, 5:25].set(1)
+    # ground_truth_map = ground_truth_map.at[58:61, 5:25].set(1) 
+
+    # poles 
+    ground_truth_map = ground_truth_map.at[20:23, 17:20].set(1)
+    ground_truth_map = ground_truth_map.at[20:23, 27:30].set(1) 
+    ground_truth_map = ground_truth_map.at[20:23, 5:8].set(1) 
+    ground_truth_map = ground_truth_map.at[28:31, 0:3].set(1) 
+    ground_truth_map = ground_truth_map.at[28:31, 6:9].set(1)
+    ground_truth_map = ground_truth_map.at[28:31, 15:18].set(1)
+
+    ground_truth_map = ground_truth_map.at[35:38, 17:20].set(1)
+    ground_truth_map = ground_truth_map.at[35:38, 27:30].set(1) 
+    ground_truth_map = ground_truth_map.at[35:38, 5:8].set(1) 
+    ground_truth_map = ground_truth_map.at[44:47, 0:3].set(1) 
+    ground_truth_map = ground_truth_map.at[44:47, 6:9].set(1)
+    ground_truth_map = ground_truth_map.at[44:47, 15:18].set(1) 
+
+    ground_truth_map = ground_truth_map.at[60:63, 17:20].set(1)
+    ground_truth_map = ground_truth_map.at[60:63, 27:30].set(1) 
+    ground_truth_map = ground_truth_map.at[60:63, 5:8].set(1) 
+    ground_truth_map = ground_truth_map.at[75:78, 0:3].set(1) 
+    ground_truth_map = ground_truth_map.at[75:78, 6:9].set(1)
+    ground_truth_map = ground_truth_map.at[75:78, 15:18].set(1)
 
     # belief map 
     # initialize all with -1 (unkown) 
