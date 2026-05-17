@@ -1,9 +1,18 @@
 import jax 
 import jax.numpy as jnp 
 from functions import initialize_maps, mppi_step, dynamics_step, update_belief_map, update_belief_map_limitedfov 
-from plotting import plot_simulation
+from plotting import plot_simulation, animate_simulation
+import os 
 
 def main(): 
+    # plot and animation path 
+    folder_name = "plots_and_animations" 
+    os.makedirs(folder_name, exist_ok=True) 
+    plot_name = "pole" 
+    animation_name = "pole" 
+    plot_path = os.path.join(folder_name, f"{plot_name}.png") 
+    animation_path = os.path.join(folder_name, f"{animation_name}.mp4")  
+
     # setup parameters 
     dt = 0.1
     max_steps = 500 
@@ -88,7 +97,18 @@ def main():
     print("simulation completed") 
 
     # plot_simulation(ground_truth_map, state_history, goal_pos, resolution)
-    plot_simulation(belief_map, state_history, control_history, goal_pos, resolution) 
+    plot_simulation(belief_map, state_history, control_history, goal_pos, plot_path, resolution) 
+
+    print("Generating simulation videos")
+    animate_simulation(
+        ground_truth_map=ground_truth_map, 
+        state_history=state_history, 
+        control_history=control_history, 
+        goal_pos=goal_pos, 
+        resolution=resolution, 
+        save_path=animation_path,
+        fps=10
+    ) 
 
 if __name__ == "__main__" : 
     main()
