@@ -34,9 +34,9 @@ def initialize_maps(width_m : float = 3.0, length_m : float = 10.0, resolution :
 # The @jax.jit decorator compiles this function down to optimized machine code (XLA).
 # It makes this function incredibly fast, which we need for MPPI. 
 @jax.jit 
-def update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, radius_cells): 
+def update_belief_map(belief_map, ground_truth_map, sys_row, sys_col, radius_cells): 
     """
-    simulates the drone sensor updating its internal map 
+    simulates the system sensor updating its internal map 
     using vector operations instead of for loops
     """ 
     # getting shape of our belief map 
@@ -50,9 +50,9 @@ def update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, radius
     # R[i, j] will be i, and C[i, j] will be j for every cell in the map (to be used later for broadcasting) 
     R, C = jnp.meshgrid(r_idx, c_idx, indexing='ij') 
 
-    # calculating the squared distance from drone to all cells 
+    # calculating the squared distance from the system to all cells 
     # square distance to save computation time 
-    dist_sq = (R - drone_row)**2 + (C - drone_col)**2 
+    dist_sq = (R - sys_row)**2 + (C - sys_col)**2 
 
     # boolean checking 
     in_sensor_range = dist_sq <= (radius_cells**2) 
@@ -65,7 +65,7 @@ def update_belief_map(belief_map, ground_truth_map, drone_row, drone_col, radius
     return new_belief_map  
 
 @jax.jit 
-def update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_col, drone_theta, radius_cells, fov_rad): 
+def update_belief_map_limitedfov(belief_map, ground_truth_map, sys_row, sys_col, sys_theta, radius_cells, fov_rad): 
     """
     simulates the drone sensor updating its internal map based on the fov and its heading
     using vector operations instead of for loops
@@ -81,24 +81,24 @@ def update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_
     # R[i, j] will be i, and C[i, j] will be j for every cell in the map (to be used later for broadcasting) 
     R, C = jnp.meshgrid(r_idx, c_idx, indexing='ij') 
 
-    # calculating the squared distance from drone to all cells 
+    # calculating the squared distance from system to all cells 
     # square distance to save computation time 
-    dist_sq = (R - drone_row)**2 + (C - drone_col)**2 
+    dist_sq = (R - sys_row)**2 + (C - sys_col)**2 
 
     # boolean checking 
     in_sensor_range = dist_sq <= (radius_cells**2)  
 
     # fov limited update 
-    # calculating the dx and dy from the drone to all the cell in the grid 
+    # calculating the dx and dy from the system to all the cell in the grid 
     # C corresponds to x (columns) and R corresponds to y (rows) 
-    dx = C - drone_col 
-    dy = R - drone_row 
+    dx = C - sys_col 
+    dy = R - sys_row 
 
     # calculating the absolute angle to each cell 
     cell_angles = jnp.arctan2(dy, dx) 
 
     # difference between the angles 
-    angle_diff = cell_angles - drone_theta 
+    angle_diff = cell_angles - sys_theta 
 
     # normalization between [-pi, pi] 
     angle_diff = jnp.arctan2(jnp.sin(angle_diff), jnp.cos(angle_diff)) 
@@ -107,10 +107,10 @@ def update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_
     in_fov = jnp.abs(angle_diff) <= (fov_rad / 2.0) 
 
     # current cell is always visible (arctan(0,0) edge case) 
-    is_drone_cell = dist_sq == 0 
+    is_sys_cell = dist_sq == 0 
 
-    # combine distance, FOV, and drone cell conditions
-    is_visible = (in_sensor_range & in_fov) | is_drone_cell 
+    # combine distance, FOV, and system cell conditions
+    is_visible = (in_sensor_range & in_fov) | is_sys_cell 
 
     # using jnp.where(condition, x, y) 
     # where in_sensor_range is true, pick from ground_truth_map 
@@ -122,7 +122,7 @@ def update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_
 @jax.jit 
 def dynamics_step(state, control, dt, max_speed) : 
     """
-    update the drone state using unicycle kinematics via euler integration 
+    update the system state using second order unicycle dynamics model via euler integration 
     can handle a single state or a batch of mppi states
     inputs : array of shape (..., 4) that has [px, py, theta, v] 
     control : array of shape (..., 2) that has [a, omega] 
@@ -154,7 +154,7 @@ def dynamics_step(state, control, dt, max_speed) :
     next_theta = theta + omega * dt 
     next_v = v + a * dt 
 
-    # clipping the max drone velocity 
+    # clipping the max velocity 
     next_v = jnp.clip(next_v, -max_speed, max_speed) 
 
     # repacking the state 
@@ -295,7 +295,7 @@ def mppi_step(state, nominal_controls, belief_map, goal_pose, prng_key, N=1000, 
     # trajectory and final pos costs
 
     # trajectory cost wrt the goal (penaliing the trajectory for wandering)
-    # squared euclidean distance between drone and the goal at all the time steps
+    # squared euclidean distance between system and the goal at all the time steps
     step_goal_costs = jnp.sum((all_positions - goal_pose)**2, axis=-1)  # shape (N,H)
     trajectory_goal_cost = jnp.sum(step_goal_costs, axis=-1) * 0.05 # sums along the last axis, shape (N,) 
 

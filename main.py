@@ -26,7 +26,7 @@ def main():
     start_state = jnp.array([1.5, 1.0, jnp.pi/2, 0.0]) 
     goal_pos = jnp.array([1.5, 9.0]) 
 
-    # Define sensor radius (e.g., 1.5 meters = 15 cells)
+    # Define sensor radius in cells (example 1.5 meters = 15 cells) (here 0.5 meters)
     sensor_radius_cells = 5 
 
     # define camera FOV 
@@ -50,16 +50,16 @@ def main():
 
         # updates belief map
         # Convert physical position to grid indices
-        drone_col = int(current_state[0] / resolution)
-        drone_row = int(current_state[1] / resolution)
+        sys_col = int(current_state[0] / resolution)
+        sys_row = int(current_state[1] / resolution)
 
         # extract heading 
-        drone_theta = current_state[2] 
+        sys_theta = current_state[2] 
 
         # Update what the drone sees
-        belief_map = update_belief_map_limitedfov(belief_map, ground_truth_map, drone_row, drone_col, drone_theta, sensor_radius_cells, fov_rad)
+        belief_map = update_belief_map_limitedfov(belief_map, ground_truth_map, sys_row, sys_col, sys_theta, sensor_radius_cells, fov_rad)
 
-        # calculate distance to goal for completion 
+     # calculate distance to goal for completion 
         dist_to_goal = jnp.linalg.norm(current_state[:2]-goal_pos) 
         if dist_to_goal <= 0.1 : 
             print(f"goal reached at step {step}")

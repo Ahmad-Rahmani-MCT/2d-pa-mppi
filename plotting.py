@@ -4,7 +4,7 @@ import numpy as np
 
 def plot_simulation(map_matrix, state_history, control_history, goal_pos, resolution=0.1, arrow_step=10):
     """
-    Plots the 2D environment, goal, drone's trajectory, and state/control inputs.
+    Plots the 2D environment, goal, system's trajectory, and state/control inputs.
     Includes directional arrows to indicate heading.
     """
     # Convert JAX arrays to standard numpy for plotting
@@ -60,7 +60,7 @@ def plot_simulation(map_matrix, state_history, control_history, goal_pos, resolu
                   u[::arrow_step], v_dir[::arrow_step], 
                   color='red', scale=25, width=0.005, headwidth=4, alpha=0.7, label='Heading')
     
-    ax_map.set_title("2D MPPI Drone Navigation")
+    ax_map.set_title("2D MPPI Autonomous Navigation")
     ax_map.set_xlabel("X Position (m)")
     ax_map.set_ylabel("Y Position (m)")
     ax_map.legend(loc='upper left')
