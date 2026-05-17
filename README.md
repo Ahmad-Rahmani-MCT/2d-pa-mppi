@@ -47,7 +47,16 @@ To run this project, you will need Python 3 installed. It is recommended to use 
 ```bash
 git clone <your-repository-url>
 cd 2D-PA-MPPI
+```
 
 2. Install the required dependencies:
 ```bash
 pip install -r requirements.txt
+``` 
+
+## Usage 
+Run the main script to execute the simulation. The maps, start/goal positions, and MPPI parameters (horizon, sample size, temperature) can be configured directly inside the script. 
+```bash
+python main.py
+```  
+Outputs will be saved automatically to the plots_and_animations directory.
