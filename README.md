@@ -7,16 +7,15 @@ Instead of relying on a traditional global path planner (like A* or Dijkstra), t
 ## Results
 
 ### Pole Field Navigation
-<img src="plots_and_animations/pole.png" alt="Pole Field Plot" width="800">
-
-<video src="plots_and_animations/pole.mp4" controls="controls" style="max-width: 800px;">
-</video>
-
 ### Maze Navigation
 <img src="plots_and_animations/maze.png" alt="Maze Plot" width="800">
 
-<video src="plots_and_animations/maze.mp4" controls="controls" style="max-width: 800px;">
-</video>
+![Maze Animation](plots_and_animations/maze.gif) 
+
+### Pole Field Navigation
+<img src="plots_and_animations/pole.png" alt="Pole Field Plot" width="800">
+
+![Pole Field Animation](plots_and_animations/pole.gif)
 
 ## Repository Structure
 
